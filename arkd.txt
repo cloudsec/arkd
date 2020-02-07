@@ -1,0 +1,564 @@
+$$ The kernel debugger script for checking kernel level rootkits.
+$$ by wzt 2020	http://github.com/cloudsec
+$$
+$$ All the structure offset is hardcoded base on:
+$$ win10-1903 amd64, kernel version 18362
+$$
+
+.if (${$arg1} == 0)
+{
+	.printf "Anti Rootkit - The Kernel Debugger Scripts v0.01.\n"
+	.printf "by wzt\thttp://github.com/cloudsec\n\n"
+	.printf "usage: <options>\n"
+	.printf "options:\n"
+	.printf "0\t--\tshow the commond list.\n"
+	.printf "1\t--\tcheck hidden process.\n"
+	.printf "2\t--\tcheck hidden driver.\n"
+	.printf "3\t--\tlist PspcidTable.\n"
+	.printf "4\t--\tlist process create callback notify routine.\n"
+	.printf "5\t--\tlist thread create callback notify routine.\n"
+	.printf "6\t--\tlist driver create callback notify routine.\n"
+	.printf "7\t--\tlist ssdt.\n"
+	.printf "8\t--\tlist ssdt hook.\n"
+	.printf "9\t--\tcheck ssdt/ssdt_shadow inline hook.\n"
+	.printf "10\t--\tlist process vads.\n"
+	.printf "\n"
+}
+.elsif (${$arg1} == 1)
+{
+.printf "checking hidden process ...\n"
+.printf "\tchecking nt!KiProcessListHead ...\n"
+r @$t1=nt!KiProcessListHead
+r @$t2 = poi(@$t1)
+
+.while (@$t1 != @$t2)
+{
+	r @$t3 = @$t2-0x248
+	.printf "\tchecking\t%30ma(%d)\r", @$t3+0x450, poi(@$t3+0x2e8)
+
+	r @$t4=nt!PsActiveProcessHead;
+	r @$t5=poi(@$t4);
+	r @$t6=0
+	.while (@$t5 != @$t4)
+	{
+		.if (poi(@$t3+0x2e8) == poi(@$t5-0x8))
+		{
+			r @$t6=1
+			.break
+		}
+		r @$t5=poi(@$t5)
+	}
+	.if (@$t6 == 0)
+	{
+		.printf "\tfound hide process %30ma(%d)\n", @$t3+0x450, poi(@$t3+0x2e8)
+	}
+	r @$t2 = poi(@$t2)
+}
+.printf "\t\t\t\t\t\t\t\t\n"
+
+$$ check all the threads in the processor block wait queue. 
+r @$t7=poi(nt!KeNumberProcessors)
+r @$t7=@$t7 & 0xffff
+.for (r @$t8 = 0; @$t8 < @$t7; r @$t8 = @$t8 + 1)
+{
+	.printf "\tchecking nt!KiProcessorBlock[%d] ...\n", @$t8; 
+	r @$t1=poi(nt!KiProcessorBlock+@$t8*8)+0x5900
+	r @$t2 = poi(@$t1)
+
+	.while (@$t1 != @$t2)
+	{
+		r @$t3 = poi(@$t2-0xd8+0x220)
+		.printf "\tchecking\t%30ma(%d)\r", @$t3+0x450, poi(@$t3+0x2e8)
+
+		r @$t4=nt!PsActiveProcessHead;
+		r @$t5=poi(@$t4);
+		r @$t6=0
+		.while (@$t5 != @$t4)
+		{
+			.if (poi(@$t3+0x2e8) == poi(@$t5-0x8))
+			{
+				r @$t6=1
+				.break
+			}
+			r @$t5=poi(@$t5)
+		}
+		.if (@$t6 == 0)
+		{
+			.printf "\tfound hide process %30ma(%d)\n", @$t3+0x450, poi(@$t3+0x2e8)
+		}
+		r @$t2 = poi(@$t2)
+	}
+}
+.printf "\t\t\t\t\t\t\t\t\n"
+}
+.elsif (${$arg1} == 2)
+{
+r @$t1 = nt!PsLoadedModuleList
+r @$t2 = poi(@$t1)
+
+.while (@$t2 != @$t1)
+{
+	r @$t3 = @$t2
+	r @$t2 = poi(@$t3)
+}
+
+r @$t1 = poi(@$t3+0x30) + poi(@$t3+0x40)
+.printf "checking hide driver from address %p ...\n", @$t1
+
+r @$t2 = 0
+.while (@$t2 < 0x400000)
+{
+	.printf "checking %p\r", @$t1
+	dw @$t1 l1
+	.if ($p == 0x5a4d)
+	{
+		.printf "found hidden driver.\n"
+		.break
+	}
+
+	r @$t2 = @$t2 + 0x1000
+	r @$t1 = @$t1 + @$t2
+}
+}
+.elsif (${$arg1} == 3)
+{
+r @$t1 = poi(nt!PspCidTable)
+r @$t2 = poi(@$t1+0x08)
+r @$t3 = @$t2 & 0x3
+r @$t2 = @$t2 - @$t3
+
+.if (@$t3 == 0)
+{
+	.printf "start parsing table level 0.\n"
+}
+.elsif (@$t3 == 1)
+{
+	.printf "start parsing table level 1.\n"
+	
+	.for (r @$t4 = 0; @$t4 < 0n512; r @$t4 = @$t4 + 1)
+	{
+		r @$t5 = poi(@$t2 + @$t4*8)
+		.if (@$t5 == 0)
+		{
+			.break
+		}
+		.printf "\tparsing index %d\n", @$t4
+		r @$t14=poi(@$t5+0x8)
+		r @$t15=4
+		.for (r @$t6 = 1; @$t6 < 0n255 ; r @$t6 = @$t6 + 0n1)
+		{
+			.if (poi(@$t5+@$t6*0n16) != 0)
+			{
+				r @$t7 = (poi(@$t5+@$t6*0n16)>>0n16) | 0xffff000000000000
+			}
+			.else
+			{
+				r @$t7 = 0
+			}
+			.printf "%p\t%p\t%p\t%p\t%d\t%d(0x%x)\n", @$t5+@$t6*0n16, poi(@$t5+@$t6*0n16), @$t7, poi(@$t5+@$t6*0n16+8), @$t6, @$t14+@$t15, @$t14+@$t15	
+			r @$t15 = @$t15 + 4
+		}
+	}
+}
+.elsif (@$t3 == 2)
+{
+	.printf "start parsing table level 2.\n"
+}
+.else
+{
+	.printf "wrong handle table type.\n"
+}
+}
+.elsif (${$arg1} == 4)
+{
+r @$t1 = nt!PspCreateProcessNotifyRoutine
+r @$t2 = poi(nt!PspCreateProcessNotifyRoutineCount)
+r @$t2 = @@((int)@$t2)
+
+.printf "PspCreateProcessNotifyRoutine Callbacks:\n"
+.printf "idx\tRoutine Address\n"
+.for (r @$t3 = 0; @$t3 < @$t2; r @$t3 = @$t3 + 1)
+{
+	r @$t4 = poi(@$t1 + @$t3*8) & 0xfffffffffffffff0
+
+	r @$t6 = nt!PsLoadedModuleList
+	r @$t7 = poi(@$t6)
+	r @$t8 = 0
+	.while (@$t7 != @$t6)
+	{
+		.if (poi(@$t4 + 8) >= poi(@$t7+0x30))
+		{
+			.if (poi(@$t4 + 8) <= poi(@$t7+0x30) + poi(@$t7+0x40))
+			{
+				r @$t8 = 1
+				.break
+			}
+		}
+		r @$t7 = poi(@$t7)
+	}
+	.if (@$t8 == 1)
+	{
+		.printf "%-4d\t%p\t%msu\n", @$t3, poi(@$t4 + 8), @$t7+0x48
+		r @$t8 = 0
+	}
+	.else
+	{
+		.printf "%-4d\t%p\t<unkown>\n", @$t3, poi(@$t4 + 8)
+	}
+}
+}
+.elsif (${$arg1} == 5)
+{
+r @$t1 = nt!PspCreateThreadNotifyRoutine
+r @$t2 = poi(nt!PspCreateThreadNotifyRoutineCount)
+r @$t2 = @@((int)@$t2)
+
+.printf "PspCreateThreadNotifyRoutine Callbacks:\n"
+.printf "idx\tRoutine Address\n"
+.for (r @$t3 = 0; @$t3 < @$t2; r @$t3 = @$t3 + 1)
+{
+	r @$t4 = poi(@$t1 + @$t3*8) & 0xfffffffffffffff0
+
+	r @$t6 = nt!PsLoadedModuleList
+	r @$t7 = poi(@$t6)
+	r @$t8 = 0
+	.while (@$t7 != @$t6)
+	{
+		.if (poi(@$t4 + 8) >= poi(@$t7+0x30))
+		{
+			.if (poi(@$t4 + 8) <= poi(@$t7+0x30) + poi(@$t7+0x40))
+			{
+				r @$t8 = 1
+				.break
+			}
+		}
+		r @$t7 = poi(@$t7)
+	}
+	.if (@$t8 == 1)
+	{
+		.printf "%-4d\t%p\t%msu\n", @$t3, poi(@$t4 + 8), @$t7+0x48
+		r @$t8 = 0
+	}
+	.else
+	{
+		.printf "%-4d\t%p\t<unkown>\n", @$t3, poi(@$t4 + 8)
+	}
+}
+}
+.elsif (${$arg1} == 6)
+{
+r @$t1 = nt!PspLoadImageNotifyRoutine
+r @$t2 = 0x40
+r @$t2 = @@((int)@$t2)
+
+.printf "PspLoadImageNotifyRoutine Callbacks:\n"
+.printf "idx\tRoutine Address\n"
+.for (r @$t3 = 0; @$t3 < @$t2; r @$t3 = @$t3 + 1)
+{
+	r @$t4 = poi(@$t1 + @$t3*8) & 0xfffffffffffffff0
+
+	r @$t6 = nt!PsLoadedModuleList
+	r @$t7 = poi(@$t6)
+	r @$t8 = 0
+	.while (@$t7 != @$t6)
+	{
+		.if (poi(@$t4 + 8) >= poi(@$t7+0x30))
+		{
+			.if (poi(@$t4 + 8) <= poi(@$t7+0x30) + poi(@$t7+0x40))
+			{
+				r @$t8 = 1
+				.break
+			}
+		}
+		r @$t7 = poi(@$t7)
+	}
+	.if (@$t8 == 1)
+	{
+		.printf "%-4d\t%p\t%msu\n", @$t3, poi(@$t4 + 8), @$t7+0x48
+		r @$t8 = 0
+	}
+	.else
+	{
+		.printf "%-4d\t%p\t<unkown>\n", @$t3, poi(@$t4 + 8)
+	}
+}
+}
+.elsif (${$arg1} == 7)
+{
+r @$t1 = nt!KeServiceDescriptorTableFilter
+r @$t2 = poi(@$t1)
+r @$t3 = poi(@$t1+0x10)
+
+.for (r @$t1 = 0; @$t1 < @$t3; r @$t1 = @$t1 + 1)
+{
+	r @$t4 = poi(@$t2 + @$t1*4)
+	r @$t5 = @$t2 + @@((int)(@$t4>>4))
+
+	r @$t6 = nt!PsLoadedModuleList
+	r @$t7 = poi(@$t6)
+	r @$t8 = 0
+	.while (@$t7 != @$t6)
+	{
+		.if (@$t5 >= poi(@$t7+0x30))
+		{
+			.if (@$t5 <= poi(@$t7+0x30) + poi(@$t7+0x40))
+			{
+				r @$t8 = 1
+				.break
+			}
+		}
+		r @$t7 = poi(@$t7)
+	}
+	.if (@$t8 == 1)
+	{
+		.printf "%-4d\t%p\t%msu\n", @$t1, @$t5, @$t7+0x48
+		r @$t8 = 0
+	}
+	.else
+	{
+		.printf "%-4d\t%p\t<unkown>\n", @$t1, @$t5
+	}
+}
+}
+.elsif (${$arg1} == 8)
+{
+r @$t1 = nt!KiSystemServiceUser
+r @$t2 = 0
+
+.while (@$t2 < 0x150)
+{
+	r @$t3 = @@(*(unsigned char *)(@$t1+@$t2))
+	r @$t4 = @@(*(unsigned char *)(@$t1+@$t2+1))
+	r @$t5 = @@(*(unsigned char *)(@$t1+@$t2+2))
+	
+	.if (@$t3 == 0x4c)
+	{
+		.if (@$t4 == 0x8d)
+		{
+			.if (@$t5 == 0x15)
+			{
+				r @$t6 = @@(*(int *)(@$t1+@$t2+3))
+				r @$t7 = @$t1+@$t2+3+@$t6+4
+				.break
+			}
+		}
+	}
+
+	r @$t2 = @$t2 + 1
+}
+
+.printf "checking KiServiceTable hook ...\n"
+.if (poi(@$t7) != poi(nt!KeServiceDescriptorTable))
+{
+	.printf "KiServiceTable %p hook into %p\n", poi(nt!KeServiceDescriptorTable), poi(@$t7)
+}
+.else
+{
+	.printf "\tKiServiceTable ok.\n"
+}
+
+.printf "checking ssdt hook ...\n"
+r @$t1 = nt!KeServiceDescriptorTableFilter
+r @$t2 = poi(@$t1)
+r @$t3 = poi(@$t1+0x10)
+
+.for (r @$t1 = 0; @$t1 < @$t3; r @$t1 = @$t1 + 1)
+{
+	r @$t4 = poi(@$t2 + @$t1*4)
+	r @$t5 = @$t2 + @@((int)(@$t4>>4))
+
+	r @$t6 = nt!PsLoadedModuleList
+	r @$t7 = poi(@$t6)
+	r @$t8 = 0
+	.while (@$t7 != @$t6)
+	{
+		.if (@$t5 >= poi(@$t7+0x30))
+		{
+			.if (@$t5 <= poi(@$t7+0x30) + poi(@$t7+0x40))
+			{
+				r @$t8 = 1
+				.break
+			}
+		}
+		r @$t7 = poi(@$t7)
+	}
+	.if (@$t8 == 1)
+	{
+		.printf "%-4d\t%p\t%msu\n", @$t1, @$t5, @$t7+0x48
+		r @$t8 = 0
+	}
+	.else
+	{
+		.printf "%-4d\t%p\t<unkown>\n", @$t1, @$t5
+	}
+}
+}
+.elsif (${$arg1} == 9)
+{
+r @$t1 = nt!KiSystemServiceUser
+r @$t2 = 0
+
+.while (@$t2 < 0x150)
+{
+	r @$t3 = @@(*(unsigned char *)(@$t1+@$t2))
+	r @$t4 = @@(*(unsigned char *)(@$t1+@$t2+1))
+	r @$t5 = @@(*(unsigned char *)(@$t1+@$t2+2))
+	
+	.if (@$t3 == 0x4c)
+	{
+		.if (@$t4 == 0x8d)
+		{
+			.if (@$t5 == 0x15)
+			{
+				r @$t6 = @@(*(int *)(@$t1+@$t2+3))
+				r @$t7 = @$t1+@$t2+3+@$t6+4
+				.break
+			}
+		}
+	}
+
+	r @$t2 = @$t2 + 1
+}
+
+.printf "checking KiServiceTable hook ...\n"
+.if (poi(@$t7) != poi(nt!KeServiceDescriptorTable))
+{
+	.printf "KiServiceTable %p hook into %p\n", poi(nt!KeServiceDescriptorTable), poi(@$t7)
+}
+.else
+{
+	.printf "\tKiServiceTable ok.\n"
+}
+
+.printf "checking inline hook ...\n"
+r @$t1 = nt!KeServiceDescriptorTableFilter
+r @$t2 = poi(@$t1)
+r @$t3 = poi(@$t1+0x10)
+
+.for (r @$t1 = 0; @$t1 < @$t3; r @$t1 = @$t1 + 1)
+{
+	r @$t4 = poi(@$t2 + @$t1*4)
+	r @$t5 = @$t2 + @@((int)(@$t4>>4))
+
+	r @$t6 = nt!PsLoadedModuleList
+	r @$t7 = poi(@$t6)
+	r @$t8 = 0
+	.while (@$t7 != @$t6)
+	{
+		.if (@$t5 >= poi(@$t7+0x30))
+		{
+			.if (@$t5 <= poi(@$t7+0x30) + poi(@$t7+0x40))
+			{
+				r @$t8 = 1
+				.break
+			}
+		}
+		r @$t7 = poi(@$t7)
+	}
+	.if (@$t8 == 1)
+	{
+		.printf "%-4d\t%p\t%msu\r", @$t1, @$t5, @$t7+0x48
+		
+		r @$t8 = 0
+
+		r @$t9 = @@(*(unsigned char *)(@$t5+0))
+		r @$t10 = 0
+		.if (@$t9 == 0xeb)
+		{
+			r @$t10 = 1
+		}
+		.elsif (@$t9 == 0xe9)
+		{
+			r @$t10 = 1
+		}
+		.elsif (@$t9 == 0xea)
+		{	
+			r @$t10 = 1
+		}	
+		.elsif (@$t9 == 0xe8)
+		{
+			r @$t10 = 1
+		}	
+		.elsif (@$t9 == 0x9a)
+		{
+			r @$t10 = 1
+		}
+
+		.if (@$t10 == 1)
+		{
+			.printf "found inline hook %p->%x\n", @$t5, @$t9
+		}			
+	}
+}
+.printf "\n"
+}
+.elsif (${$arg1} == 10)
+{
+$$ eprocess->VadRoot
+r @$t1 = poi($proc+0x658)
+
+$$ get first node.
+r @$t2 = @$t1
+.while (poi(@$t2))
+{
+	r @$t2 = poi(@$t2)
+}
+
+$$ walk the entire val tree.
+r @$t4 = @$t2
+r @$t5 = 0
+
+.printf "idx\tvad\tstart_vpn\tend_vpn\tbase_address\n\n"
+.while (@$t4)
+{
+	r @$t5 = @$t5 + 1
+
+	.printf "%2d %p\t%p\t%p\n", @$t5, @$t4,poi(@$t4+0x18)&0xfffffffff, poi(@$t4+0x1c)&0xfffffffff
+
+	$$ right node exists.
+	.if (poi(@$t4+0x8) != 0)
+	{
+		$$.printf "have right node.\n"
+		r @$t3 = poi(@$t4+0x8) & 0xfffffffffffffff0
+
+		.while (1)
+		{
+			$$r @$t3
+			.if (@$t3 == 0)
+			{
+				.break
+			}
+			r @$t4 = @$t3
+			r @$t3 = poi(@$t3)& 0xfffffffffffffff0
+		}
+		.continue
+	}
+
+	$$.printf "walk parent node.\n"
+	$$ get parent node.
+	r @$t3 = 	poi(@$t4+0x10)& 0xfffffffffffffff0
+
+	.while (1)
+	{
+		$$r @$t3
+		.if (@$t3 == 0)
+		{
+			r @$t4 = 0
+			.break
+		}
+		.if (@$t3 == @$t4)
+		{
+			r @$t4 = 0
+			.break
+		}
+		.if (poi(@$t3) == @$t4)
+		{
+			r @$t4 = @$t3
+			.break
+		}
+		r @$t4 = @$t3
+		r @$t3 = poi(@$t3+0x10)& 0xfffffffffffffff0 
+	}
+	
+}
+}
