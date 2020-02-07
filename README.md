@@ -23,4 +23,3 @@ options:
 8       --      list ssdt hook.
 9       --      check ssdt/ssdt_shadow inline hook.
 10      --      list process vads.
-
