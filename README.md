@@ -3,6 +3,7 @@ The kernel debugger script for checking kernel level rootkits
 
 by wzt 2020	(http://github.com/cloudsec)
 
+```
 All the structure offset is hardcoded base on:
 win10-1903 amd64, kernel version 18362
 
@@ -22,3 +23,4 @@ options:
 8       --      list ssdt hook.
 9       --      check ssdt/ssdt_shadow inline hook.
 10      --      list process vads.
+```
