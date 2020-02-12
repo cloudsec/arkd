@@ -1,5 +1,6 @@
 # arkd
-The kernel debugger script for checking kernel level rootkits.
+The kernel debugger script for checking kernel level rootkits
+
 by wzt 2020	(http://github.com/cloudsec)
 
 All the structure offset is hardcoded base on:
