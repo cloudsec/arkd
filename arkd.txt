@@ -5,23 +5,29 @@ $$ All the structure offset is hardcoded base on:
 $$ win10-1903 amd64, kernel version 18362
 $$
 
+aS ARKD_VERSION	"v0.02"
+aS ARKD_AUTHOR	"wzt"
+aS ARKD_SITE	"http://github.com/cloudsec"
+
 .if (${$arg1} == 0)
 {
-	.printf "Anti Rootkit - The Kernel Debugger Scripts v0.01.\n"
-	.printf "by wzt\thttp://github.com/cloudsec\n\n"
+	.printf "The Kernel Debugger Scripts for checking rootkits ${ARKD_VERSION}.\n"
+	.printf "Copyright (c) ${ARKD_AUTHOR} 2020\t${ARKD_SITE}\n\n"
 	.printf "usage: <options>\n"
 	.printf "options:\n"
-	.printf "0\t--\tshow the commond list.\n"
-	.printf "1\t--\tcheck hidden process.\n"
-	.printf "2\t--\tcheck hidden driver.\n"
-	.printf "3\t--\tlist PspcidTable.\n"
-	.printf "4\t--\tlist process create callback notify routine.\n"
-	.printf "5\t--\tlist thread create callback notify routine.\n"
-	.printf "6\t--\tlist driver create callback notify routine.\n"
-	.printf "7\t--\tlist ssdt.\n"
-	.printf "8\t--\tlist ssdt hook.\n"
-	.printf "9\t--\tcheck ssdt/ssdt_shadow inline hook.\n"
-	.printf "10\t--\tlist process vads.\n"
+	.printf "0\t\t--\tshow the commond list.\n"
+	.printf "1 <0/1>\t\t--\tcheck hidden process.\n"
+	.printf "\t\t\t0 - normal check | 1 - deep check.\n"
+	.printf "2\t\t--\tcheck hidden driver.\n"
+	.printf "3\t\t--\tlist PspcidTable.\n"
+	.printf "4\t\t--\tlist process create callback notify routine.\n"
+	.printf "5\t\t--\tlist thread create callback notify routine.\n"
+	.printf "6\t\t--\tlist driver create callback notify routine.\n"
+	.printf "7\t\t--\tlist ssdt.\n"
+	.printf "8\t\t--\tlist ssdt hook.\n"
+	.printf "9\t\t--\tcheck ssdt/ssdt_shadow inline hook.\n"
+	.printf "10 <pid>\t--\tlist process vads.\n"
+	.printf "11\t\t--\tlist object types.\n"
 	.printf "\n"
 }
 .elsif (${$arg1} == 1)
@@ -56,6 +62,8 @@ r @$t2 = poi(@$t1)
 }
 .printf "\t\t\t\t\t\t\t\t\n"
 
+.if (${$arg2} == 1)
+{
 $$ check all the threads in the processor block wait queue. 
 r @$t7=poi(nt!KeNumberProcessors)
 r @$t7=@$t7 & 0xffff
@@ -88,6 +96,7 @@ r @$t7=@$t7 & 0xffff
 		}
 		r @$t2 = poi(@$t2)
 	}
+}
 }
 .printf "\t\t\t\t\t\t\t\t\n"
 }
@@ -494,8 +503,24 @@ r @$t3 = poi(@$t1+0x10)
 }
 .elsif (${$arg1} == 10)
 {
+r @$t1=nt!PsActiveProcessHead;
+r @$t2=poi($t1);
+r @$t3=0
+.while (@$t2 != @$t1)
+{
+	.if (poi(@$t2-0x2f0+0x2e8) == ${$arg2})
+	{
+	 	.printf "%ma\t%d\n", @$t2-0x2f0+0x450, poi(@$t2-0x8);
+		r @$t3 = 1
+		.break
+	}	
+	r @$t2=poi(@$t2)
+}
+
+.if (@$t3 == 1)
+{
 $$ eprocess->VadRoot
-r @$t1 = poi($proc+0x658)
+r @$t1 = poi(@$t2-0x2f0+0x658)
 
 $$ get first node.
 r @$t2 = @$t1
@@ -508,7 +533,7 @@ $$ walk the entire val tree.
 r @$t4 = @$t2
 r @$t5 = 0
 
-.printf "idx\tvad\tstart_vpn\tend_vpn\tbase_address\n\n"
+.printf "idx\tvad\t\tstart_vpn\t\tend_vpn\tbase_address\n\n"
 .while (@$t4)
 {
 	r @$t5 = @$t5 + 1
@@ -559,6 +584,26 @@ r @$t5 = 0
 		r @$t4 = @$t3
 		r @$t3 = poi(@$t3+0x10)& 0xfffffffffffffff0 
 	}
-	
+}	
 }
+.else
+{
+	.printf "Not found process pid ${$arg2}\n"
+} 
+}
+.elsif (${$arg1} == 11)
+{
+r @$t1 = nt!ObpObjectTypes
+r @$t2 = poi(poi(nt!ObpTypeObjectType)+0x2c)
+
+.printf "Idx\tName\t\t\t\t\tObject num\n\n"
+.for (r @$t3 = 0; @$t3 < @$t2; r @$t3 = @$t3 + 1)
+{
+	r @$t4 = poi(@$t1 + @$t3*8)
+	.printf "%2d\t%-32msu\t%d\n", @$t3, @$t4+0x10, poi(@$t4+0x2c)
+} 
+}
+.else
+{
+	.printf "Wrong argument.\n"
 }
