@@ -9,7 +9,7 @@ The kernel debugger script for checking kernel level rootkits.
 ```
 0: kd> $$>a<d:\wzt\nt\arkd\arkd.txt 0
 The Kernel Debugger Scripts for checking rootkits v0.02.
-(c) by wzt 2020 http://github.com/cloudsec
+Copyright (c) wzt 2020  http://github.com/cloudsec
 
 usage: <options>
 options:
