@@ -8,19 +8,22 @@ The kernel debugger script for checking kernel level rootkits.
 # usage
 ```
 0: kd> $$>a<d:\wzt\nt\arkd\arkd.txt 0
-Anti Rootkit - The Kernel Debugger Scripts v0.01.
-by wzt  (http://github.com/cloudsec)
+The Kernel Debugger Scripts for checking rootkits v0.02.
+(c) by wzt 2020 http://github.com/cloudsec
+
 usage: <options>
 options:
-0       --      show the commond list.
-1       --      check hidden process.
-2       --      check hidden driver.
-3       --      list PspcidTable.
-4       --      list process create callback notify routine.
-5       --      list thread create callback notify routine.
-6       --      list driver create callback notify routine.
-7       --      list ssdt.
-8       --      list ssdt hook.
-9       --      check ssdt/ssdt_shadow inline hook.
-10      --      list process vads.
+0               --      show the commond list.
+1 <0/1>         --      check hidden process.
+                        0 - normal check | 1 - deep check.
+2               --      check hidden driver.
+3               --      list PspcidTable.
+4               --      list process create callback notify routine.
+5               --      list thread create callback notify routine.
+6               --      list driver create callback notify routine.
+7               --      list ssdt.
+8               --      list ssdt hook.
+9               --      check ssdt/ssdt_shadow inline hook.
+10 <pid>        --      list process vads.
+11              --      list object types.
 ```
