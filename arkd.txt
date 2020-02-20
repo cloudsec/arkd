@@ -1,11 +1,11 @@
-$$ The kernel debugger script for checking kernel level rootkits.
+$$ The kernel debugger script for checking rootkits.
 $$ by wzt 2020	http://github.com/cloudsec
 $$
 $$ All the structure offset is hardcoded base on:
 $$ win10-1903 amd64, kernel version 18362
 $$
 
-aS ARKD_VERSION	"v0.02"
+aS ARKD_VERSION	"v0.04"
 aS ARKD_AUTHOR	"wzt"
 aS ARKD_SITE	"http://github.com/cloudsec"
 
@@ -28,6 +28,7 @@ aS ARKD_SITE	"http://github.com/cloudsec"
 	.printf "9\t\t--\tcheck ssdt/ssdt_shadow inline hook.\n"
 	.printf "10 <pid>\t--\tlist process vads.\n"
 	.printf "11\t\t--\tlist object types.\n"
+	.printf "12\t\t--\tlist security descriptor.\n"
 	.printf "\n"
 }
 .elsif (${$arg1} == 1)
@@ -603,7 +604,45 @@ r @$t2 = poi(poi(nt!ObpTypeObjectType)+0x2c)
 	.printf "%2d\t%-32msu\t%d\n", @$t3, @$t4+0x10, poi(@$t4+0x2c)
 } 
 }
+.elsif (${$arg1} == 12)
+{
+r @$t1=nt!PsActiveProcessHead;
+r @$t2=poi($t1);
+
+.printf "Process\t\t\tSD Address\t\tOwner Sid Identifier\tSubAuthority\n\n"
+.while (@$t2 != @$t1)
+{
+	r @$t3 = poi(@$t2-0x2f0-0x30+0x28)
+	
+	.if (@$t3 == 0x0  or (@$t3 & 3))
+	{
+		r @$t2=poi(@$t2)
+		.continue
+	}
+
+	.if (@@(*(unsigned char *)@$t3)  == 0 or @@(*(unsigned char *)(@$t3+0x4)) != 0x14)
+	{
+		r @$t2=poi(@$t2)
+		.continue
+	}
+
+	$$ _SECURITY_DESCRIPTOR_RELATIVE->Owner
+	r @$t4 = @$t3 + @@(*(unsigned char *)(@$t3+0x4))
+	r @$t5 = @@(*(int64 *)(@$t4+0x2)) & 0x0000ffffffffffff
+
+	.printf "%-16ma(%-5d)\t%p\t%x\t", @$t2-0x2f0+0x450, poi(@$t2-0x8), @$t3, @$t5
+	.for (r @$t6 = 0; @$t6 < @@(*(unsigned char *)(@$t4+0x1)); r @$t6 = @$t6 + 1)
+	{
+		r @$t7 = @@(*(int *)(@$t4+0x8+4*@$t6)) 
+		.printf "%x ", @$t7
+	}
+	.printf "\n"
+
+	r @$t2=poi(@$t2)
+}
+}
 .else
 {
 	.printf "Wrong argument.\n"
 }
+
