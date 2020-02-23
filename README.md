@@ -8,7 +8,7 @@ The kernel debugger script for checking kernel level rootkits.
 # usage
 ```
 0: kd> $$>a<d:\wzt\nt\arkd\arkd.txt 0
-The Kernel Debugger Scripts for checking rootkits v0.06.
+The Kernel Debugger Scripts for checking rootkits v0.08.
 Copyright (c) wzt 2020  http://github.com/cloudsec
 
 usage: <options>
@@ -25,7 +25,7 @@ options:
 8               --      list ssdt hook.
 9               --      check ssdt/ssdt_shadow inline hook.
 10 <pid>        --      list process vads.
-11              --      list object types.
+11              --      check object hook.
 12              --      list security descriptor.
 13 <pid>        --      privilege escalation of the process.
 ```
