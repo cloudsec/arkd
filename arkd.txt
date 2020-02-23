@@ -6,7 +6,7 @@ $$ win10-1903 amd64, kernel version 18362
 $$
 
 ad *
-aS ARKD_VERSION	"v0.06"
+aS ARKD_VERSION	"v0.08"
 aS ARKD_AUTHOR	"wzt"
 aS ARKD_SITE	"http://github.com/cloudsec"
 
@@ -28,7 +28,7 @@ aS ARKD_SITE	"http://github.com/cloudsec"
 	.printf "8\t\t--\tlist ssdt hook.\n"
 	.printf "9\t\t--\tcheck ssdt/ssdt_shadow inline hook.\n"
 	.printf "10 <pid>\t--\tlist process vads.\n"
-	.printf "11\t\t--\tlist object types.\n"
+	.printf "11\t\t--\tcheck object hook.\n"
 	.printf "12\t\t--\tlist security descriptor.\n"
 	.printf "13 <pid>\t--\tprivilege escalation of the process.\n"
 	.printf "\n"
@@ -599,11 +599,67 @@ r @$t5 = 0
 r @$t1 = nt!ObpObjectTypes
 r @$t2 = poi(poi(nt!ObpTypeObjectType)+0x2c)
 
-.printf "Idx\tName\t\t\t\t\tObject num\n\n"
 .for (r @$t3 = 0; @$t3 < @$t2; r @$t3 = @$t3 + 1)
 {
 	r @$t4 = poi(@$t1 + @$t3*8)
-	.printf "%2d\t%-32msu\t%d\n", @$t3, @$t4+0x10, poi(@$t4+0x2c)
+
+	.printf "%2d checking object <%msu> %p ...\n", @$t3, @$t4+0x10, @$t4
+	.for (r @$t5 = 0; @$t5 < 9; r @$t5 = @$t5 + 1)
+	{
+		r @$t8 = poi(@$t4+0x70+@$t5*8)
+		.if (@$t8 == 0)
+		{
+			.continue
+		}
+
+		r @$t6 = nt!PsLoadedModuleList
+		r @$t7 = poi(@$t6)
+
+		.while (@$t7 != @$t6)
+		{
+			.if (@$t8 >= poi(@$t7+0x30) and (@$t8 <= poi(@$t7+0x30)+poi(@$t7+0x40)))
+			{
+				.if (@$t5 == 0)
+				{
+					.printf "\tDumpProcedure pointer %p => <%msu>\n", @$t8, @$t7+0x48
+				}
+				.elsif (@$t5 == 1)
+				{
+					.printf "\tOpenProcedure pointer %p => <%msu>\n", @$t8, @$t7+0x48
+				}
+				.elsif (@$t5 == 2)
+				{
+					.printf "\tCloseProcedure pointer %p => <%msu>\n", @$t8, @$t7+0x48
+				}
+				.elsif (@$t5 == 3)
+				{
+					.printf "\tDeleteProcedure pointer %p => <%msu>\n", @$t8, @$t7+0x48
+				}
+				.elsif (@$t5 == 4)
+				{
+					.printf "\tParseProcedure pointer %p => <%msu>\n", @$t8, @$t7+0x48
+				}
+				.elsif (@$t5 == 5)
+				{
+					.printf "\tParseProcedureEx pointer %p => <%msu>\n", @$t8, @$t7+0x48
+				}
+				.elsif (@$t5 == 6)
+				{
+					.printf "\tSecurityProcedure pointer %p => <%msu>\n", @$t8, @$t7+0x48
+				}
+				.elsif (@$t5 == 7)
+				{
+					.printf "\tQueryNameProcedure pointer %p => <%msu>\n", @$t8, @$t7+0x48
+				}
+				.elsif (@$t5 == 8)
+				{
+					.printf "\tOkayToCloseProcedure pointer %p => <%msu>\n", @$t8, @$t7+0x48
+				}
+				.break
+			}
+			r @$t7 = poi(@$t7)	
+		}	
+	}	
 } 
 }
 .elsif (${$arg1} == 12)
